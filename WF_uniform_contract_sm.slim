@@ -1,0 +1,33 @@
+// set up a simple neutral simulation
+initialize() {
+	initializeTreeSeq();
+	
+	// m1 mutation type: neutral
+	initializeMutationType("m1", 0.0, "f", -0.01);
+	initializeMutationType("m2", 0.5, "f", -0.01);
+	m1.convertToSubstitution=F;
+	m2.convertToSubstitution=F;
+	m1.color="blue";
+	m2.color="red";
+	
+	// g1 genomic element type: uses m1 for all mutations
+	initializeGenomicElementType("g1", c(m1, m2), c(1, 1));
+	
+	// uniform chromosome of length 100 kb with uniform recombination
+	initializeGenomicElement(g1, 0, 99999);
+	initializeMutationRate(1e-7);
+	initializeRecombinationRate(1e-7);
+}
+
+// create a population of 1000 individuals
+1 {
+	sim.addSubpop("p1", 1000);
+}
+
+
+14000 late() { 
+
+sim.outputFull("WF_uniform_contract_sm.txt");
+sim.treeSeqOutput("WF_uniform_contract_sm.trees"); 
+
+}

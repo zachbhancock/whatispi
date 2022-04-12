@@ -1,0 +1,154 @@
+function (float) area(o$ pop, f$ sigma, f$ maxDistance) {
+   x = pop.individuals.x;
+   y = pop.individuals.y;
+   ab = pop.spatialBounds;
+   A = rep(1.0, length(x));
+   nearby = (
+         ((x - ab[0]) < maxDistance) |
+         ((ab[2] - x) < maxDistance) |
+         ((y - ab[1]) < maxDistance) |
+         ((ab[3] - y) < maxDistance)
+     );
+   A[nearby] = (A[nearby] *
+        (pnorm(x[nearby], ab[0], sigma) - pnorm(x[nearby], ab[2], sigma)) *
+        (pnorm(y[nearby], ab[1], sigma) - pnorm(y[nearby], ab[3], sigma))
+       );
+   return(A);
+}
+
+initialize() {
+    initializeSLiMModelType("nonWF");
+    initializeSLiMOptions(dimensionality="xy");
+    initializeTreeSeq();
+    
+    defineGlobal("W", 20.0);  // width of the simulated area 
+    defineGlobal("SIGMA", 1.0);
+    defineGlobal("K", 20);  // carrying-capacity per unit square (roughly)
+    catn(c("K =", K));
+    catn(c("W =", W));
+    catn(c("SIGMA =", SIGMA));
+    catn(c("K =", K));
+    defineGlobal("SD", SIGMA);  // sigma_D, the dispersal distance
+    catn(c("SD =", SIGMA));
+    defineGlobal("SI", SIGMA);  // sigma_I, the spatial interaction distance
+    catn(c("SI =", SI));
+    defineGlobal("SM", SIGMA);  // sigma_M, the mate choice distance
+    catn(c("SM =", SIGMA));
+    defineGlobal("G", 100000);  // genome length
+    catn(c("G =", G));
+    defineGlobal("FECUN", 2); // mean fecundity
+    catn(c("FECUN =", FECUN));
+    defineGlobal("RHO", FECUN/((1+FECUN) * K)); // Global in spatial competition function
+    defineGlobal("Age", c(0.0, 1.0)); //force WF model
+
+
+    initializeMutationType("m1", 0.0, "f", -0.01);
+    initializeMutationType("m2", 0.5, "f", -0.01);
+    m1.convertToSubstitution = F;
+    m2.convertToSubstitution = F;
+    m1.color = "blue";
+    m2.color = "red";
+    initializeGenomicElementType("g1", c(m1, m2), c(1, 1));
+    initializeGenomicElement(g1, 0, G-1);
+    initializeMutationRate(1e-7);
+    initializeRecombinationRate(1e-7);
+    
+    // spatial competition
+    initializeInteractionType(1, "xy", reciprocal=T, maxDistance=SI);
+    i1.setInteractionFunction("n", 1.0/(2*PI*SI^2), SI);
+    
+    // mate choice
+    initializeInteractionType(2, "xy", reciprocal=T, maxDistance=SM);
+    i2.setInteractionFunction("n", 1.0/(2*PI*SM^2), SM);
+}
+
+reproduction() {
+	mate = i2.drawByStrength(individual, 1);
+    if (mate.size()) {
+        nOff = rpois(1, FECUN);
+        individual.tag = individual.tag + nOff;
+        for (i in seqLen(nOff)) {
+           pos = individual.spatialPosition + rnorm(2, 0, SIGMA);
+           offspring = p1.addCrossed(individual, mate);
+           offspring.setSpatialPosition(p1.pointReflected(pos));
+          	}
+        }
+        return;
+        }
+        
+
+    
+1 early() {
+    sim.addSubpop("p1", asInteger(K * W * W));
+    p1.setSpatialBounds(c(0, 0, W, W));
+    // random initial positions
+    for (ind in p1.individuals) {
+        ind.setSpatialPosition(p1.pointUniform());
+        ind.tag = 0;
+    }
+    i1.evaluate();
+
+}
+
+early() {
+    i1.evaluate(p1);
+    inds = p1.individuals;
+    ages = inds.age;
+    mortality = Age[ages];
+    survival = 1 - mortality;
+    competition = i1.totalOfNeighborStrengths(inds);
+    // record strength of competition in the tagF
+    inds.tagF = competition;
+    inds.fitnessScaling = (pmin(0.95, 1/(1 + RHO * competition)))*survival;  }  
+
+    // avoid edge effects
+late() {
+	i1.evaluate();
+	sigma = asFloat(SIGMA);
+   neighbor_density = i1.totalOfNeighborStrengths(p1.individuals);
+   habitat = area(p1, sigma, i1.maxDistance);
+   p1.individuals.tag =
+        rpois(p1.individualCount, FECUN / (1 + neighbor_density / (habitat * K)));
+}
+
+
+1: early(){
+ind = p1.individuals;
+if (sim.generation > 900) {
+catn("Mean_fitness: " + mean(ind.fitnessScaling));
+}
+}
+
+1: late() {
+   // to be ready for mate choice
+   i2.evaluate(p1);
+   ind = p1.individuals;
+   if (sim.generation > 900) {
+	catn("Generation: " + sim.generation + " Population_size: " + p1.individualCount);
+	}
+
+}
+
+9999 late(){
+
+sim.outputFull("uniform_before_contract.txt");
+}
+
+10000 late(){
+
+defineGlobal("K", 2);
+catn(c("K =", K));
+    defineGlobal("SD", SIGMA);  // sigma_D, the dispersal distance
+    defineGlobal("SI", SIGMA);  // sigma_I, the spatial interaction distance
+    defineGlobal("SM", SIGMA);  // sigma_M, the mate choice distance
+    defineGlobal("G", 100000);  // genome length
+    defineGlobal("FECUN", 2); // mean fecundity
+    defineGlobal("RHO", FECUN/((1+FECUN) * K)); // Global in spatial competition function
+    defineGlobal("Age", c(0.0, 1.0)); //force WF model
+    }
+    
+14000 late(){
+	sim.treeSeqOutput("uniform_contract.trees");
+	sim.outputFull("uniform_contract_full.txt");
+	sim.simulationFinished();
+	}
